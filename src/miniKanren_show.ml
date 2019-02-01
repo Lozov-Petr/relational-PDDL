@@ -3,26 +3,59 @@ open MiniKanrenStd
 open Tester
 open GT
 
-open Pddl
-
-let show_llist f x =
-  let rec show_list x = Printf.sprintf "[%s]" (String.concat "; " x) in
-  let rec show_llist x =
-    match x with
-    | Var _               -> [], Some (show(logic) (fun _ -> "") x)
-    | Value Nil           -> [], None
-    | Value (Cons (x,xs)) -> let l, q = show_llist xs in f x :: l, q in
-  match show_llist x with
-  | [], None   -> "[]"
-  | [], Some s -> s
-  | x , None   -> show_list x
-  | x , Some s -> Printf.sprintf "%s ^ %s" (show_list x) s
+open Environment
 
 
-let answer_show  show_action show_obj x = show(List.ground) (show(Pair.ground) show_action               (show(List.ground) show_obj))               x
-let answer_lshow show_action show_obj x = show_llist        (show(Pair.logic ) (show(logic) show_action) (show_llist        (show(logic) show_obj))) x
+let state_show env x =
+  show List.ground
+    (show Pair.ground
+      env.showPred
+      (show List.ground
+        env.showObj)) x
 
-let answer_reifier action_reifier obj_reifier x = List.reify (Pair.reify action_reifier (List.reify obj_reifier)) x
+let state_lshow env x =
+  show List.logic
+    (show Pair.logic
+      (show logic env.showPred)
+      (show List.logic
+        (show logic env.showObj))) x
 
-let answer_run show_action action_reifier show_obj obj_reifier x =
-  runR (answer_reifier action_reifier obj_reifier) (answer_show show_action show_obj) (answer_lshow show_action show_obj) x
+let state_reify env x =
+  List.reify
+    (Pair.reify
+      env.predReifier
+      (List.reify
+        env.objReifier)) x
+
+let state_run env x =
+  runR (state_reify env)
+       (state_show  env)
+       (state_lshow env) x
+
+(******************************************)
+
+let answer_show env x =
+  show List.ground
+    (show Pair.ground
+      env.showAct
+      (show List.ground
+        env.showObj)) x
+
+let answer_lshow env x =
+  show List.logic
+    (show Pair.logic
+      (show logic env.showAct)
+      (show List.logic
+        (show logic env.showObj))) x
+
+let answer_reifier env x =
+  List.reify
+    (Pair.reify
+      env.actReifier
+      (List.reify
+        env.objReifier)) x
+
+let answer_run env x =
+  runR (answer_reifier env)
+       (answer_show env)
+       (answer_lshow env) x
