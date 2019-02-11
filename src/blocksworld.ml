@@ -97,6 +97,7 @@ let clear x      = pair !!CLEAR (!!x % nil())
 let ontable x    = pair !!ONTABLE (!!x % nil())
 let handempty () = pair !!HANDEMPTY (nil())
 let on x y       = pair !!ON (l2ll[!!x;!!y])
+let holding x    = pair !!HOLDING (!!x % nil ())
 
 let a = A
 let b = B
@@ -105,6 +106,19 @@ let d = D
 let e = E
 let f = F
 let g = G
+
+let objs01 () = l2ll @@ List.map (!!) [a; b; c; d]
+let objs02 () = l2ll @@ List.map (!!) [a; b; c; d]
+let objs03 () = l2ll @@ List.map (!!) [a; b; c; d]
+let objs04 () = l2ll @@ List.map (!!) [a; b; c; d; e]
+let objs05 () = l2ll @@ List.map (!!) [a; b; c; d; e]
+let objs06 () = l2ll @@ List.map (!!) [a; b; c; d; e]
+let objs07 () = l2ll @@ List.map (!!) [a; b; c; d; e; f]
+let objs08 () = l2ll @@ List.map (!!) [a; b; c; d; e; f]
+let objs09 () = l2ll @@ List.map (!!) [a; b; c; d; e; f]
+let objs10 () = l2ll @@ List.map (!!) [a; b; c; d; e; f; g]
+
+let initTest () = [holding d; ontable a; on b a; on c b; clear c]
 
 let init01 () = [clear c; clear a; clear b; clear d; ontable c; ontable a; ontable b; ontable d; handempty ()]
 let init02 () = [clear b; ontable d; on b c; on c a; on a d; handempty ()]

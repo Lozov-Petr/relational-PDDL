@@ -4,6 +4,15 @@ open Environment
 
 open MiniKanren_show
 
+type 'a0 gpeano = O | S of 'a0
+
+module For_gpeano = Fmap (struct
+  let rec fmap fa0 = function
+    | O -> O
+    | S a0 -> S (fa0 a0)
+  type 'a0 t = 'a0 gpeano
+  end)
+
 type ('a, 'b) value =
   | Variable of 'a
   | Object   of 'b
@@ -191,8 +200,179 @@ let rec sort pred_cmp obj_cmp state acc res = conde [
   fresh (x xs newAcc)
     (state === x % xs)
     (insert pred_cmp obj_cmp x acc newAcc)
-    (sort pred_cmp obj_cmp xs newAcc res)
+    (sort pred_cmp obj_cmp xs newAcc res)]
+
+(*******************)
+
+let rec append x y xy = conde [
+  (x === nil ()) &&& (y === xy);
+  fresh (e xs xys)
+    (x === e % xs)
+    (xy === e % xys)
+    (append xs y xys)]
+
+let rec addObjsToInst objs inst res = conde [
+  (objs === nil ()) &&& (res === nil ());
+  fresh (o os res')
+    (objs === o % os)
+    (res === (o % inst) % res')
+    (addObjsToInst os inst res')]
+
+let rec addObjsToInsts objs insts res = conde [
+  (insts === nil ()) &&& (res === nil ());
+  fresh (i is l res')
+    (insts === i % is)
+    (addObjsToInst objs i l)
+    (addObjsToInsts objs is res')
+    (append l res' res)]
+
+let rec instArgs objs args res = conde [
+  (args === nil ()) &&& (res === nil () % nil ());
+  fresh (x xs insts)
+    (args === x % xs)
+    (instArgs objs xs insts)
+    (addObjsToInsts objs insts res)]
+
+let rec addName name argInsts res = conde [
+  (argInsts === nil ()) &&& (res === nil ());
+  fresh (x xs res')
+    (argInsts === x % xs)
+    (res === pair name x % res')
+    (addName name xs res')]
+
+let rec instsForAct objs name args res =
+  fresh (insts)
+    (instArgs objs args insts)
+    (addName name insts res)
+
+let rec instsForActs objs acts res = conde [
+   (acts === nil ()) &&& (res === nil ());
+   fresh (name args pre eff xs insts res')
+     (acts === action name args pre eff % xs)
+     (instsForAct objs name args insts)
+     (instsForActs objs xs res')
+     (append insts res' res)]
+
+let rec evalInsts env path insts acts state res = conde [
+  (insts === nil ()) &&& (res === nil ());
+  fresh (x xs name instArgs args pre eff ren resOfPre res' state')
+    (insts === x % xs)
+    (x === pair name instArgs)
+    (lookupAction name acts (action name args pre eff))
+    (zip args instArgs ren)
+    (eval pre ren state resOfPre)
+    (conde [
+      (resOfPre === !!true)  &&&
+      (res === pair (x % path) state' % res') &&&
+      update env.predCmp env.objCmp state eff ren state' &&&
+      evalInsts env path xs acts state res';
+      (resOfPre === !!false) &&&
+      evalInsts env path xs acts state res])]
+
+
+let shortest n m res =
+  let rec shortest x y res =
+    conde [
+      (x === nil ()) &&& (res === n);
+      fresh (x' a)
+      (x === a % x')
+      (conde [
+        (y === nil ()) &&& (res === m);
+        fresh (y' b)
+        (y === b % y')
+        (shortest x' y' res)])]
+  in shortest n m res
+
+
+let rec updateStates states newStates states' newStates' =
+  let rec step states newPath newState states' isNew = conde [
+    (states === nil ()) &&& (states' === nil ()) &&& (isNew === !!true);
+    fresh (p ps path state len newLen shortestPath states'')
+      (states === p % ps)
+      (p === pair path state)
+      (conde [
+        (state === newState) &&&
+        (isNew === !!false) &&&
+        (states' === pair shortestPath state % ps) &&&
+        shortest path newPath shortestPath;
+        (state =/= newState) &&&
+        (states' === p % states'') &&&
+        step ps newPath newState states'' isNew])]
+  in conde [
+    (newStates === nil ()) &&& (states' === states) &&& (newStates' === nil ());
+    fresh (x xs path state states'' isNew newStates'')
+      (newStates === x % xs)
+      (x === pair path state)
+      (step states path state states'' isNew)
+      (conde [
+        (isNew === !!true) &&&
+        (newStates' === x % newStates'') &&&
+        updateStates states'' xs states' newStates'';
+        (isNew === !!false) &&&
+        updateStates states'' xs states' newStates'])]
+
+let rec getAnswers states goal answers = conde [
+   (states === nil ()) &&& (answers === nil ());
+   fresh (path state states' isAnswer answers')
+     (states === pair path state % states')
+     (eval goal (nil ()) state isAnswer)
+     (conde [
+       (isAnswer === !!true) &&&
+       (answers === path % answers') &&&
+       getAnswers states' goal answers';
+       (isAnswer === !!false) &&&
+       getAnswers states' goal answers])]
+
+let rec elem x l =
+  fresh (h t)
+    (l === h % t)
+    (conde [
+      h === x;
+      elem x t])
+
+(*******************)
+
+let maxP = ref 0
+let maxC = ref 0
+
+let rec print_size_p n states = conde [
+   (if n > !maxP then (maxP := n; Printf.printf "Passed: %d\n%!" n); states === nil ());
+   fresh (x xs)
+     (states === x % xs)
+     (print_size_p (n+1) xs)
 ]
+
+let rec print_size_c n states = conde [
+   (if n > !maxC then (maxC := n; Printf.printf "Curr: %d\n%!" n); states === nil ());
+   fresh (x xs)
+     (states === x % xs)
+     (print_size_c (n+1) xs)
+]
+
+let rec checker env objs acts passed curr goal answ =
+  let step passed curr passed' curr' answers =
+    fresh (path state c cs insts newStates newStates' curr'' newStates'')
+      (curr === c % cs)
+      (c === pair path state)
+      (instsForActs objs acts insts)
+      (evalInsts env path insts acts state newStates)
+      (getAnswers newStates goal answers)
+      (updateStates (c % passed) newStates passed' newStates')
+      (updateStates cs newStates' curr'' newStates'')
+      (append curr'' newStates'' curr')
+  in
+    fresh (passed' curr' answers)
+     (print_size_p 0 passed)
+     (print_size_c 0 curr)
+     (step passed curr passed' curr' answers)
+     (conde [
+       elem answ answers;
+       checker env objs acts passed' curr' goal answ])
+
+let rec new_checker env objs acts state goal answ =
+   fresh (sortedState)
+     (sort env.predCmp env.objCmp state (nil ()) sortedState)
+     (checker env objs acts (nil ()) (pair (nil ()) sortedState % nil ()) goal answ)
 
 
 let checker env acts state goal answ =
